@@ -1,8 +1,10 @@
 <script lang="ts">
   import "./styles.css"
 
-  import type { Effect, EffectConversion, Item, ItemDatabase } from "$lib/model"
+  import { deserialize_item_db, serialize_item_db, type Effect, type EffectConversion, type Item, type ItemDatabase } from "$lib/model"
   import EffectConversionEditor from "./effect_conversion_editor.svelte"
+  import { download, upload } from "$lib/io"
+  import ImagePicker from "./image_picker.svelte"
 
 
   const SVELTE_TYPE_WORKAROUND : any = undefined
@@ -36,87 +38,18 @@
   }
 
 
-  function import_item_db() : void {
-    const input = document.createElement("input")
-    input.type = "file"
-    input.accept = "application/json"
-    input.addEventListener("change", async () => {
-      if (input.files?.length) {
-        const file = input.files[0]
-        const json = await file.text()
-        item_db = deserialize_item_db(json)
-        selected_item = undefined
-      }
-    })
-    input.click()
+  async function import_item_db() : Promise<void> {
+    const file = await upload("application/zip")
+    if (file) {
+      item_db = await deserialize_item_db(file)
+      selected_item = undefined
+    }
   }
 
 
-  function export_item_db() : void {
-    const serialized_db = serialize_item_db(item_db)
-    const file = new File([serialized_db], item_db.name + ".json", { type: "application/json" })
+  async function export_item_db() : Promise<void> {
+    const file = await serialize_item_db(item_db)
     download(file)
-  }
-
-
-  function serialize_item_db(database : ItemDatabase) : string {
-    const effects = database.effects.map(e => e.name).sort()
-
-    const items = database.items.map((item) => {
-      return {
-        name: item.name,
-        conversions: item.conversions.map(conversion => ({
-          inputs: conversion.inputs.map(e => e.name),
-          outputs: conversion.outputs.map(e => e.name),
-        })),
-      }
-    })
-
-    const serialized = {
-      name: database.name,
-      effects,
-      items,
-    }
-
-    return JSON.stringify(serialized)
-  }
-
-
-  function deserialize_item_db(json : string) : ItemDatabase {
-    const object = JSON.parse(json)
-
-    const effects : Effect[] = object.effects.map((name : string) => ({ name }))
-    const effects_map = Object.fromEntries(effects.map(e => [e.name, e]))
-
-    const items = object.items.map((item : any) => {
-      return {
-        name: item.name,
-        conversions: item.conversions.map((conversion : any) => ({
-          inputs: conversion.inputs.map((effect : string) => effects_map[effect]),
-          outputs: conversion.outputs.map((effect : string) => effects_map[effect]),
-        }))
-      }
-    })
-
-    return {
-      name: object.name,
-      effects,
-      items,
-    }
-  }
-
-
-  function download(file : File) : void {
-    const object_url = URL.createObjectURL(file)
-
-    const link = document.createElement("a")
-    link.href = object_url
-    link.download = file.name
-    link.hidden = true
-
-    link.click();
-
-    URL.revokeObjectURL(object_url)
   }
 
 
@@ -172,6 +105,16 @@
       if (selected_item === item) {
         selected_item = item
       }
+    }
+  }
+
+
+  function change_item_image(item : Item, image : File | undefined) : void {
+    item.image = image
+
+    item_db = item_db
+    if (selected_item === item) {
+      selected_item = item
     }
   }
 
@@ -324,20 +267,28 @@
       {/if}
     </header>
     {#if selected_item}
-      <div class="conversion-list scrollable">
-        {#each selected_item.conversions as conversion (conversion)}
-          <div class="conversion">
-            <EffectConversionEditor effects={item_db.effects} {conversion}/>
-            <menu>
-              <li>
-                <button
-                  on:click={() => remove_conversion(selected_item ?? SVELTE_TYPE_WORKAROUND, conversion)}
-                  title="Delete Effect Conversion"
-                >❌</button>
-              </li>
-            </menu>
-          </div>
-        {/each}
+      <div class="main-container scrollable">
+        <div class="item-image-container">
+          <ImagePicker
+            source={selected_item.image}
+            on:change={(evt) => change_item_image(selected_item ?? SVELTE_TYPE_WORKAROUND, evt.detail)}
+          />
+        </div>
+        <div class="conversion-list">
+          {#each selected_item.conversions as conversion (conversion)}
+            <div class="conversion">
+              <EffectConversionEditor effects={item_db.effects} {conversion}/>
+              <menu>
+                <li>
+                  <button
+                    on:click={() => remove_conversion(selected_item ?? SVELTE_TYPE_WORKAROUND, conversion)}
+                    title="Delete Effect Conversion"
+                  >❌</button>
+                </li>
+              </menu>
+            </div>
+          {/each}
+        </div>
       </div>
     {/if}
   </main>
@@ -559,6 +510,28 @@
     background-color: var(--palette-2);
     background-color: rgba(255, 255, 255, 0.125);
     color: var(--palette-4);
+  }
+
+
+  .main-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-top: 1rem;
+  }
+
+
+  .item-image-container {
+    width: 9em;
+    height: 9em;
+    display: grid;
+    grid-template-columns: 100%;
+    grid-template-rows: 100%;
+    background-color: var(--palette-1);
+    border-radius: 0.5em;
+    padding: 0.5em;
+    box-shadow: 0 0 0.5em rgba(0, 0, 0, 0.5);
+    flex-shrink: 0;
   }
 
 
