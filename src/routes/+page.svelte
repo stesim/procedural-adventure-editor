@@ -1,13 +1,9 @@
 <script lang="ts">
   import "./styles.css"
 
-  import { deserialize_item_db, serialize_item_db, type Effect, type EffectConversion, type Item, type ItemDatabase } from "$lib/model"
-  import EffectConversionEditor from "./effect_conversion_editor.svelte"
+  import { deserialize_item_db, serialize_item_db, type Effect, type EffectConversion, type Item, type ItemDatabase, type Tag } from "$lib/model"
   import { download, upload } from "$lib/io"
-  import ImagePicker from "./image_picker.svelte"
-
-
-  const SVELTE_TYPE_WORKAROUND : any = undefined
+  import ItemEditor from "./item_editor.svelte"
 
 
   let item_db : ItemDatabase = create_example_db()
@@ -33,6 +29,8 @@
       name: "Unnamed Item Database",
       items: [],
       effects: [],
+      item_tags: [],
+      conversion_tags: [],
     }
     selected_item = undefined
   }
@@ -70,6 +68,7 @@
     const item : Item = {
       name,
       conversions: [],
+      tags: [],
     }
 
     item_db.items.push(item)
@@ -105,16 +104,6 @@
       if (selected_item === item) {
         selected_item = item
       }
-    }
-  }
-
-
-  function change_item_image(item : Item, image : File | undefined) : void {
-    item.image = image
-
-    item_db = item_db
-    if (selected_item === item) {
-      selected_item = item
     }
   }
 
@@ -173,26 +162,101 @@
   }
 
 
-  function add_conversion(item : Item) : void {
-    const conversion : EffectConversion = { inputs: [], outputs: [] }
-    item.conversions.push(conversion)
+  function add_item_tag() : void {
+    const name = prompt("Enter tag name:")
+    if (!name) {
+      return
+    }
+
+    const tag : Tag = { name }
+    item_db.item_tags.push(tag)
+    item_db.item_tags.sort((a, b) => a.name.localeCompare(b.name))
 
     item_db = item_db
   }
 
 
-  function remove_conversion(item : Item, conversion : EffectConversion) : void {
-    if (!confirm(`Are you sure you want to delete the effect conversion?`)) {
+  function remove_item_tag(tag : Tag) : void {
+    if (!confirm(`Are you sure you want to delete "${tag.name}"?\nAll references to the tag will be removed from the item database.`)) {
       return
     }
 
-    const index = item.conversions.indexOf(conversion)
+    const index = item_db.item_tags.indexOf(tag)
     if (index < 0) {
-      throw new Error("item does not contain conversion")
+      throw new Error("invalid tag")
     }
-    item.conversions.splice(index, 1)
+    item_db.item_tags.splice(index, 1)
+
+    for (const item of item_db.items) {
+      const tag_index = item.tags.indexOf(tag)
+      if (tag_index >= 0) {
+        item.tags.splice(tag_index, 1)
+      }
+    }
 
     item_db = item_db
+    selected_item = selected_item
+  }
+
+
+  function rename_item_tag(tag : Tag) : void {
+    const name = prompt("Enter tag name:", tag.name)
+    if (name) {
+      tag.name = name
+
+      item_db = item_db
+      selected_item = selected_item
+    }
+  }
+
+
+  function add_conversion_tag() : void {
+    const name = prompt("Enter tag name:")
+    if (!name) {
+      return
+    }
+
+    const tag : Tag = { name }
+    item_db.conversion_tags.push(tag)
+    item_db.conversion_tags.sort((a, b) => a.name.localeCompare(b.name))
+
+    item_db = item_db
+  }
+
+
+  function remove_conversion_tag(tag : Tag) : void {
+    if (!confirm(`Are you sure you want to delete "${tag.name}"?\nAll references to the tag will be removed from the item database.`)) {
+      return
+    }
+
+    const index = item_db.conversion_tags.indexOf(tag)
+    if (index < 0) {
+      throw new Error("invalid tag")
+    }
+    item_db.conversion_tags.splice(index, 1)
+
+    for (const item of item_db.items) {
+      for (const conversion of item.conversions) {
+        const tag_index = conversion.tags.indexOf(tag)
+        if (tag_index >= 0) {
+          conversion.tags.splice(tag_index, 1)
+        }
+      }
+    }
+
+    item_db = item_db
+    selected_item = selected_item
+  }
+
+
+  function rename_conversion_tag(tag : Tag) : void {
+    const name = prompt("Enter tag name:", tag.name)
+    if (name) {
+      tag.name = name
+
+      item_db = item_db
+      selected_item = selected_item
+    }
   }
 
 
@@ -204,12 +268,15 @@
     const conversion : EffectConversion = {
       inputs: effects.filter(e => conversion_inputs.includes(e.name)),
       outputs: effects.filter(e => conversion_outputs.includes(e.name)),
+      tags: [],
     }
 
     const db : ItemDatabase = {
       name: "Example Item Database",
-      items: [{name: "light bulb", conversions: [conversion]}],
+      items: [{name: "light bulb", conversions: [conversion], tags: []}],
       effects,
+      item_tags: [{name: "garage"}, {name: "kitchen"}],
+      conversion_tags: [{name: "fun"}, {name: "realistic"}],
     }
 
     return db
@@ -218,19 +285,19 @@
 
 
 <div class="main-layout">
-  <menu class="stretch">
+  <menu class="inset stretch">
     <li><button on:click={create_new_item_db}>New</button></li>
     <li><button on:click={import_item_db}>Load</button></li>
     <li><button on:click={export_item_db}>Save</button></li>
   </menu>
-  <header>
+  <header class="inset">
     <h1>{item_db.name}</h1>
     <button class="flat" on:click={rename_item_db} title="Rename Item Database">🖉</button>
   </header>
-  <header class="centered">
+  <header class="inset centered">
     {item_db.effects.length} effects, {item_db.items.length} items
   </header>
-  <aside>
+  <aside class="inset panel">
     <header>
       <h2>Items</h2>
       <menu>
@@ -251,67 +318,70 @@
       {/each}
     </ul>
   </aside>
-  <main style="row-gap: 0;">
+  <main class="inset panel" style="row-gap: 0;">
     <header style="z-index: 1;">
       {#if selected_item}
         <h2 class="centered">{selected_item?.name ?? ""}</h2>
-        <menu>
-          <li>
-            <button
-              class="flat large"
-              on:click={() => add_conversion(selected_item ?? SVELTE_TYPE_WORKAROUND)}
-              title="Add Effect Conversion"
-            >+</button>
-          </li>
-        </menu>
       {/if}
     </header>
-    {#if selected_item}
-      <div class="main-container scrollable">
-        <div class="item-image-container">
-          <ImagePicker
-            source={selected_item.image}
-            on:change={(evt) => change_item_image(selected_item ?? SVELTE_TYPE_WORKAROUND, evt.detail)}
-          />
-        </div>
-        <div class="conversion-list">
-          {#each selected_item.conversions as conversion (conversion)}
-            <div class="conversion">
-              <EffectConversionEditor effects={item_db.effects} {conversion}/>
-              <menu>
-                <li>
-                  <button
-                    on:click={() => remove_conversion(selected_item ?? SVELTE_TYPE_WORKAROUND, conversion)}
-                    title="Delete Effect Conversion"
-                  >❌</button>
-                </li>
-              </menu>
-            </div>
-          {/each}
-        </div>
-      </div>
-    {/if}
+    <ItemEditor {item_db} item={selected_item}/>
   </main>
-  <aside>
-    <header>
-      <h2>Effects</h2>
-      <menu>
-        <li><button class="flat large" on:click={add_effect} title="Add Effect">+</button></li>
-      </menu>
-    </header>
-    <ul class="scrollable">
-      {#each item_db.effects as effect, index (effect)}
-        {@const id = `radio-button-effect-${index}`}
-        <li>
-          <input type="radio" {id} bind:group={selected_effect} value={effect}>
-          <label for={id} class="item-row">
-            <span class="fill-right">{effect.name}</span>
-            <button class="flat on-parent-hover" on:click={() => rename_effect(effect)} title="Rename Effect" style="line-height: 1.25em;">🖉</button>
-            <button class="flat on-parent-hover" on:click={() => remove_effect(effect)} title="Delete Effect">❌</button>
-          </label>
-        </li>
-      {/each}
-    </ul>
+  <aside class="grid auto-rows" style="gap: inherit;">
+    <section class="inset panel">
+      <header>
+        <h2>Effects</h2>
+        <menu>
+          <li><button class="flat large" on:click={add_effect} title="Add Effect">+</button></li>
+        </menu>
+      </header>
+      <ul class="scrollable">
+        {#each item_db.effects as effect, index (effect)}
+          {@const id = `radio-button-effect-${index}`}
+          <li>
+            <input type="radio" {id} bind:group={selected_effect} value={effect}>
+            <label for={id} class="item-row">
+              <span class="fill-right">{effect.name}</span>
+              <button class="flat on-parent-hover" on:click={() => rename_effect(effect)} title="Rename Effect" style="line-height: 1.25em;">🖉</button>
+              <button class="flat on-parent-hover" on:click={() => remove_effect(effect)} title="Delete Effect">❌</button>
+            </label>
+          </li>
+        {/each}
+      </ul>
+    </section>
+    <section class="inset panel">
+      <header>
+        <h2>Item Tags</h2>
+        <menu>
+          <li><button class="flat large" on:click={add_item_tag} title="Add Item Tag">+</button></li>
+        </menu>
+      </header>
+      <ul class="scrollable">
+        {#each item_db.item_tags as tag (tag)}
+          <li class="item-row">
+            <span class="fill-right">{tag.name}</span>
+            <button class="flat on-parent-hover" on:click={() => rename_item_tag(tag)} title="Rename Item Tag" style="line-height: 1.25em;">🖉</button>
+            <button class="flat on-parent-hover" on:click={() => remove_item_tag(tag)} title="Delete Item Tag">❌</button>
+          </li>
+        {/each}
+      </ul>
+    </section>
+    <section class="inset panel">
+      <header>
+        <h2>Effect Conversion Tags</h2>
+        <menu>
+          <li><button class="flat large" on:click={add_conversion_tag} title="Add Conversion Tag">+</button></li>
+        </menu>
+      </header>
+      <ul class="scrollable">
+        {#each item_db.conversion_tags as tag (tag)}
+          <li class="item-row">
+            <span class="fill-right">{tag.name}</span>
+            <button class="flat on-parent-hover" on:click={() => rename_conversion_tag(tag)} title="Rename Item Tag" style="line-height: 1.25em;">🖉</button>
+            <button class="flat on-parent-hover" on:click={() => remove_conversion_tag(tag)} title="Delete Item Tag">❌</button>
+          </li>
+        {/each}
+      </ul>
+    </section>
   </aside>
 </div>
 
@@ -320,7 +390,7 @@
   .main-layout {
     display: grid;
     grid-template-columns: 2fr 6fr 2fr;
-    grid-template-rows: auto 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
     gap: 0.5em;
     height: 100vh;
     padding: 0.5em;
@@ -329,14 +399,14 @@
   }
 
 
-  .main-layout > * {
+  .inset {
     position: relative;
     border-radius: 0.5em;
     overflow: hidden;
   }
 
 
-  .main-layout > *::after {
+  .inset::after {
     content: "";
     position: absolute;
     left: 0;
@@ -350,11 +420,10 @@
   }
 
 
-  main,
-  aside {
+  .panel {
     background-color: var(--palette-0);
     display: grid;
-    grid-template-rows: auto 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
     row-gap: 0.5rem;
   }
 
@@ -380,8 +449,7 @@
   }
 
 
-  aside > header,
-  main > header {
+  .panel > header {
     box-shadow: 0 0 0.5em rgba(0, 0, 0, 0.75);
     min-height: 1.5rem;
     padding: 0.5rem 0.75rem;
@@ -464,6 +532,7 @@
     min-height: 1.5em;
     padding: 0 0.75rem;
     gap: 0.25em;
+    color: var(--palette-2);
   }
 
 
@@ -473,31 +542,17 @@
     overflow: hidden;
     text-overflow: ellipsis;
     flex-shrink: 1;
+    cursor: default;
+  }
+
+
+  .item-row:hover {
+    color: var(--palette-4);
   }
 
 
   .fill-right {
     margin-right: auto;
-  }
-
-
-  button.flat {
-    appearance: none;
-    background: none;
-    outline: none;
-    border: none;
-    color: inherit;
-  }
-
-
-  button.flat:hover {
-    background-color: rgba(255, 255, 255, 0.125);
-  }
-
-
-  button.flat.large {
-    font-size: inherit;
-    padding: 0.125em 0.5em;
   }
 
 
@@ -510,62 +565,5 @@
     background-color: var(--palette-2);
     background-color: rgba(255, 255, 255, 0.125);
     color: var(--palette-4);
-  }
-
-
-  .main-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding-top: 1rem;
-  }
-
-
-  .item-image-container {
-    width: 9em;
-    height: 9em;
-    display: grid;
-    grid-template-columns: 100%;
-    grid-template-rows: 100%;
-    background-color: var(--palette-1);
-    border-radius: 0.5em;
-    padding: 0.5em;
-    box-shadow: 0 0 0.5em rgba(0, 0, 0, 0.5);
-    flex-shrink: 0;
-  }
-
-
-  .conversion-list {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 1em;
-    padding: 1em;
-  }
-
-
-  .conversion {
-    position: relative;
-    min-width: 20em;
-    background-color: var(--palette-1);
-    border-radius: 0.5em;
-    box-shadow: 0 0 0.5em rgba(0, 0, 0, 0.5);
-  }
-
-
-  .conversion > menu {
-    position: absolute;
-    right: 0;
-    top: 50%;
-    translate: 50% -50%;
-    flex-direction: column;
-
-    opacity: 0.0;
-    transition: opacity 0.125s ease-in-out;
-  }
-
-
-  .conversion:hover > menu {
-    opacity: 1.0;
   }
 </style>

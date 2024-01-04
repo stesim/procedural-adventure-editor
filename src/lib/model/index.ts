@@ -9,7 +9,13 @@ export type Effect = {
 }
 
 
+export type Tag = {
+  name : string
+}
+
+
 export type EffectConversion = {
+  tags : Tag[]
   inputs : Effect[]
   outputs : Effect[]
 }
@@ -18,6 +24,7 @@ export type EffectConversion = {
 export type Item = {
   name : string
   image? : File
+  tags : Tag[]
   conversions : EffectConversion[]
 }
 
@@ -26,6 +33,8 @@ export type ItemDatabase = {
   name : string
   effects : Effect[]
   items : Item[]
+  item_tags : Tag[]
+  conversion_tags : Tag[]
 }
 
 
@@ -40,12 +49,16 @@ export async function serialize_item_db(database : ItemDatabase, file_name = dat
   })
 
   const effects = database.effects.map(e => e.name).sort()
+  const item_tags = database.item_tags.map(t => t.name).sort()
+  const conversion_tags = database.conversion_tags.map(t => t.name).sort()
 
   const items = database.items.map((item) => {
     const serialized = {
       name: item.name,
       image: item.image ? image_names.get(item.image) : undefined,
+      tags: item.tags.map(t => t.name),
       conversions: item.conversions.map(conversion => ({
+        tags: conversion.tags.map(t => t.name),
         inputs: conversion.inputs.map(e => e.name),
         outputs: conversion.outputs.map(e => e.name),
       })),
@@ -56,6 +69,8 @@ export async function serialize_item_db(database : ItemDatabase, file_name = dat
   const json = JSON.stringify({
     name: database.name,
     effects,
+    item_tags,
+    conversion_tags,
     items,
   })
 
@@ -107,11 +122,19 @@ export async function deserialize_item_db(blob : Blob) : Promise<ItemDatabase> {
   const effects : Effect[] = object.effects.map((name : string) => ({ name }))
   const effects_map = Object.fromEntries(effects.map(e => [e.name, e]))
 
+  const item_tags : Tag[] = object.item_tags?.map((name : string) => ({ name })) ?? []
+  const item_tags_map = Object.fromEntries(item_tags.map(t => [t.name, t]))
+
+  const conversion_tags : Tag[] = object.conversion_tags?.map((name : string) => ({ name })) ?? []
+  const conversion_tags_map = Object.fromEntries(conversion_tags.map(t => [t.name, t]))
+
   const items = object.items.map((item : any) => {
     return {
       name: item.name,
       image: item.image ? images.get(item.image) : undefined,
+      tags: item.tags?.map((tag : string) => item_tags_map[tag]) ?? [],
       conversions: item.conversions.map((conversion : any) => ({
+        tags: conversion.tags?.map((tag : string) => conversion_tags_map[tag]) ?? [],
         inputs: conversion.inputs.map((effect : string) => effects_map[effect]),
         outputs: conversion.outputs.map((effect : string) => effects_map[effect]),
       }))
@@ -121,6 +144,8 @@ export async function deserialize_item_db(blob : Blob) : Promise<ItemDatabase> {
   return {
     name: object.name,
     effects,
+    item_tags,
+    conversion_tags,
     items,
   }
 }
