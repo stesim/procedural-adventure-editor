@@ -3,6 +3,8 @@ import Zip from "jszip"
 
 const FILE_NAME_SANITATION_REGEX = /[^a-z0-9.]/g
 
+const ZIP_MIME_TYPES = ["application/zip", "application/x-zip-compressed"]
+
 
 export type Effect = {
   name : string
@@ -88,7 +90,7 @@ export async function serialize_item_db(database : ItemDatabase, file_name = dat
 
 
 export async function deserialize_item_db(blob : Blob) : Promise<ItemDatabase> {
-  if (!blob.type.startsWith("application/zip")) {
+  if (!ZIP_MIME_TYPES.includes(blob.type)) {
     throw new Error("Invalid item database file type.")
   }
 
