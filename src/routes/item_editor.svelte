@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { filter } from "$lib";
   import type { EffectConversion, Item, ItemDatabase, Tag } from "$lib/model"
   import EffectConversionEditor from "./effect_conversion_editor.svelte"
   import ImagePicker from "./image_picker.svelte"
@@ -17,7 +18,7 @@
     add_tag_selection = undefined
   }
 
-  $: remaining_tags = item ? item_db.item_tags.filter(t => !item!.tags.includes(t)) : []
+  $: remaining_tags = item ? [...filter(item_db.item_tags.values(), t => !item!.tags.has(t))] : []
 
 
   function change_image(image : File | undefined) : void {
@@ -29,8 +30,7 @@
 
   function add_tag(tag : Tag) : void {
     if (item) {
-      item.tags.push(tag)
-      item.tags.sort((a, b) => a.name.localeCompare(b.name))
+      item.tags_add(tag)
       item = item
     }
   }
@@ -38,11 +38,7 @@
 
   function remove_tag(tag : Tag) : void {
     if (item) {
-      const index = item.tags.indexOf(tag)
-      if (index < 0) {
-        throw new Error("item does not contain tag")
-      }
-      item.tags.splice(index, 1)
+      item.tags_remove(tag)
       item = item
     }
   }
@@ -50,28 +46,18 @@
 
   function add_conversion() : void {
     if (item) {
-      item.conversions.push({ inputs: [], outputs: [], tags: [] })
+      const conversion = item_db.conversions_create()
+      item.conversions_add(conversion)
       item = item
     }
   }
 
 
   function remove_conversion(conversion : EffectConversion) : void {
-    if (!item) {
-      return
+    if (item && confirm(`Are you sure you want to delete the effect conversion?`)) {
+      item_db.conversions_delete(conversion)
+      item = item
     }
-
-    if (!confirm(`Are you sure you want to delete the effect conversion?`)) {
-      return
-    }
-
-    const index = item.conversions.indexOf(conversion)
-    if (index < 0) {
-      throw new Error("item does not contain conversion")
-    }
-    item.conversions.splice(index, 1)
-
-    item = item
   }
 </script>
 

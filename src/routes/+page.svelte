@@ -1,22 +1,22 @@
 <script lang="ts">
   import "./styles.css"
 
-  import { deserialize_item_db, serialize_item_db, type Effect, type EffectConversion, type Item, type ItemDatabase, type Tag } from "$lib/model"
+  import { deserialize_item_db, serialize_item_db, Effect, EffectConversion, Item, ItemDatabase, Tag } from "$lib/model"
   import { download, upload } from "$lib/io"
   import ItemEditor from "./item_editor.svelte"
 
 
   let item_db : ItemDatabase = create_example_db()
 
-  let selected_item : Item | undefined = item_db.items?.[0]
+  let selected_item : Item | undefined = undefined
 
   let selected_effect : Effect | undefined = undefined
 
 
-  $: if (selected_item && !item_db.items.includes(selected_item)) {
+  $: if (selected_item && !item_db.items.has(selected_item)) {
     selected_item = undefined
-  } else if (!selected_item && item_db.items.length > 0) {
-    selected_item = item_db.items[0]
+  } else if (!selected_item && item_db.items.size > 0) {
+    selected_item = item_db.items.values().next().value
   }
 
 
@@ -25,13 +25,7 @@
       return
     }
 
-    item_db = {
-      name: "Unnamed Item Database",
-      items: [],
-      effects: [],
-      item_tags: [],
-      conversion_tags: [],
-    }
+    item_db = new ItemDatabase("Unnamed Item Database")
     selected_item = undefined
   }
 
@@ -65,14 +59,7 @@
       return
     }
 
-    const item : Item = {
-      name,
-      conversions: [],
-      tags: [],
-    }
-
-    item_db.items.push(item)
-    item_db.items.sort((a, b) => a.name.localeCompare(b.name))
+    const item = item_db.items_create(name)
 
     selected_item = item
 
@@ -85,11 +72,7 @@
       return
     }
 
-    const index = item_db.items.indexOf(item)
-    if (index < 0) {
-      throw new Error("invalid item")
-    }
-    item_db.items.splice(index, 1)
+    item_db.items_delete(item)
 
     item_db = item_db
   }
@@ -114,9 +97,7 @@
       return
     }
 
-    const effect : Effect = { name }
-    item_db.effects.push(effect)
-    item_db.effects.sort((a, b) => a.name.localeCompare(b.name))
+    item_db.effects_create(name)
 
     item_db = item_db
   }
@@ -127,24 +108,7 @@
       return
     }
 
-    const index = item_db.effects.indexOf(effect)
-    if (index < 0) {
-      throw new Error("invalid effect")
-    }
-    item_db.effects.splice(index, 1)
-
-    for (const item of item_db.items) {
-      for (const conversion of item.conversions) {
-        const input_index = conversion.inputs.indexOf(effect)
-        if (input_index >= 0) {
-          conversion.inputs.splice(input_index, 1)
-        }
-        const output_index = conversion.outputs.indexOf(effect)
-        if (output_index >= 0) {
-          conversion.outputs.splice(output_index, 1)
-        }
-      }
-    }
+    item_db.effects_delete(effect)
 
     item_db = item_db
     selected_item = selected_item
@@ -168,9 +132,7 @@
       return
     }
 
-    const tag : Tag = { name }
-    item_db.item_tags.push(tag)
-    item_db.item_tags.sort((a, b) => a.name.localeCompare(b.name))
+    item_db.item_tags_create(name)
 
     item_db = item_db
   }
@@ -181,18 +143,7 @@
       return
     }
 
-    const index = item_db.item_tags.indexOf(tag)
-    if (index < 0) {
-      throw new Error("invalid tag")
-    }
-    item_db.item_tags.splice(index, 1)
-
-    for (const item of item_db.items) {
-      const tag_index = item.tags.indexOf(tag)
-      if (tag_index >= 0) {
-        item.tags.splice(tag_index, 1)
-      }
-    }
+    item_db.item_tags_delete(tag)
 
     item_db = item_db
     selected_item = selected_item
@@ -216,9 +167,7 @@
       return
     }
 
-    const tag : Tag = { name }
-    item_db.conversion_tags.push(tag)
-    item_db.conversion_tags.sort((a, b) => a.name.localeCompare(b.name))
+    item_db.conversion_tags_create(name)
 
     item_db = item_db
   }
@@ -229,20 +178,7 @@
       return
     }
 
-    const index = item_db.conversion_tags.indexOf(tag)
-    if (index < 0) {
-      throw new Error("invalid tag")
-    }
-    item_db.conversion_tags.splice(index, 1)
-
-    for (const item of item_db.items) {
-      for (const conversion of item.conversions) {
-        const tag_index = conversion.tags.indexOf(tag)
-        if (tag_index >= 0) {
-          conversion.tags.splice(tag_index, 1)
-        }
-      }
-    }
+    item_db.conversion_tags_delete(tag)
 
     item_db = item_db
     selected_item = selected_item
@@ -261,28 +197,38 @@
 
 
   function create_example_db() : ItemDatabase {
-    const effects = ["electricity", "heat", "light"].sort().map(name => ({name}))
+    const db = new ItemDatabase("Example Item Database")
+
+    const effects = ["electricity", "heat", "light"].map(name => db.effects_create(name))
 
     const conversion_inputs = ["electricity"]
     const conversion_outputs = ["heat", "light"]
-    const conversion : EffectConversion = {
-      inputs: effects.filter(e => conversion_inputs.includes(e.name)),
-      outputs: effects.filter(e => conversion_outputs.includes(e.name)),
-      tags: [],
-    }
+    const conversion = db.conversions_create()
+    effects.filter(e => conversion_inputs.includes(e.name)).forEach(e => conversion.inputs_add(e))
+    effects.filter(e => conversion_outputs.includes(e.name)).forEach(e => conversion.outputs_add(e))
 
-    const db : ItemDatabase = {
-      name: "Example Item Database",
-      items: [{name: "light bulb", conversions: [conversion], tags: []}],
-      effects,
-      item_tags: [{name: "garage"}, {name: "kitchen"}],
-      conversion_tags: [{name: "fun"}, {name: "realistic"}],
-    }
+    const item = db.items_create("light bulb")
+    item.conversions_add(conversion)
+
+    db.item_tags_create("garage")
+    db.item_tags_create("kitchen")
+
+    db.conversion_tags_create("fun")
+    db.conversion_tags_create("realistic")
 
     return db
   }
+
+
+  function by_name(a : { name : string }, b : { name : string }) : number {
+    return a.name.localeCompare(b.name)
+  }
 </script>
 
+
+<svelte:head>
+  <title>Procedural Adventure Editor</title>
+</svelte:head>
 
 <div class="main-layout">
   <menu class="inset stretch">
@@ -295,7 +241,7 @@
     <button class="flat" on:click={rename_item_db} title="Rename Item Database">🖉</button>
   </header>
   <header class="inset centered">
-    {item_db.effects.length} effects, {item_db.items.length} items
+    {item_db.effects.size} effects, {item_db.items.size} items
   </header>
   <aside class="inset panel">
     <header>
@@ -305,7 +251,7 @@
       </menu>
     </header>
     <ul class="scrollable">
-      {#each item_db.items as item, index (item)}
+      {#each [...item_db.items].sort(by_name) as item, index (item)}
         {@const id = `radio-button-item-${index}`}
         <li>
           <input type="radio" {id} bind:group={selected_item} value={item}>
@@ -335,7 +281,7 @@
         </menu>
       </header>
       <ul class="scrollable">
-        {#each item_db.effects as effect, index (effect)}
+        {#each [...item_db.effects].sort(by_name) as effect, index (effect)}
           {@const id = `radio-button-effect-${index}`}
           <li>
             <input type="radio" {id} bind:group={selected_effect} value={effect}>
@@ -356,7 +302,7 @@
         </menu>
       </header>
       <ul class="scrollable">
-        {#each item_db.item_tags as tag (tag)}
+        {#each [...item_db.item_tags].sort(by_name) as tag (tag)}
           <li class="item-row">
             <span class="fill-right">{tag.name}</span>
             <button class="flat on-parent-hover" on:click={() => rename_item_tag(tag)} title="Rename Item Tag" style="line-height: 1.25em;">🖉</button>
@@ -373,7 +319,7 @@
         </menu>
       </header>
       <ul class="scrollable">
-        {#each item_db.conversion_tags as tag (tag)}
+        {#each [...item_db.conversion_tags].sort(by_name) as tag (tag)}
           <li class="item-row">
             <span class="fill-right">{tag.name}</span>
             <button class="flat on-parent-hover" on:click={() => rename_conversion_tag(tag)} title="Rename Item Tag" style="line-height: 1.25em;">🖉</button>

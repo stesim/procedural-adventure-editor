@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { filter } from "$lib";
   import type { Effect, EffectConversion, ItemDatabase, Tag } from "$lib/model"
 
 
@@ -14,7 +15,7 @@
     add_input_selection = undefined
   }
 
-  $: remaining_input_effects = item_db.effects.filter(e => !conversion.inputs.includes(e))
+  $: remaining_input_effects = [...filter(item_db.effects.values(), e => !conversion.inputs.has(e))]
 
 
   let add_output_selection : Effect | undefined = undefined
@@ -24,7 +25,7 @@
     add_output_selection = undefined
   }
 
-  $: remaining_output_effects = item_db.effects.filter(e => !conversion.outputs.includes(e))
+  $: remaining_output_effects = [...filter(item_db.effects.values(), e => !conversion.outputs.has(e))]
 
 
   let add_tag_selection : Tag | undefined = undefined
@@ -34,59 +35,42 @@
     add_tag_selection = undefined
   }
 
-  $: remaining_tags = item_db.conversion_tags.filter(t => !conversion!.tags.includes(t))
+  $: remaining_tags = [...filter(item_db.conversion_tags.values(), t => !conversion!.tags.has(t))]
 
 
   function add_input(effect : Effect) : void {
-    conversion.inputs.push(effect)
-    conversion.inputs.sort((a, b) => a.name.localeCompare(b.name))
-    conversion.inputs = conversion.inputs
+    conversion.inputs_add(effect)
+    conversion = conversion
   }
 
 
   function remove_input(effect : Effect) : void {
-    const index = conversion.inputs.indexOf(effect)
-    if (index < 0) {
-      throw new Error("effect is not an input")
-    }
-    conversion.inputs.splice(index, 1)
-    conversion.inputs = conversion.inputs
+    conversion.inputs_remove(effect)
+    conversion = conversion
   }
 
 
   function add_output(effect : Effect) : void {
-    conversion.outputs.push(effect)
-    conversion.outputs.sort((a, b) => a.name.localeCompare(b.name))
-    conversion.outputs = conversion.outputs
+    conversion.outputs_add(effect)
+    conversion = conversion
   }
 
 
   function remove_output(effect : Effect) : void {
-    const index = conversion.outputs.indexOf(effect)
-    if (index < 0) {
-      throw new Error("effect is not an output")
-    }
-    conversion.outputs.splice(index, 1)
-    conversion.outputs = conversion.outputs
+    conversion.outputs_remove(effect)
+    conversion = conversion
   }
 
 
   function add_tag(tag : Tag) : void {
-    conversion.tags.push(tag)
-    conversion.tags.sort((a, b) => a.name.localeCompare(b.name))
+    conversion.tags_add(tag)
     conversion = conversion
   }
 
 
   function remove_tag(tag : Tag) : void {
-    if (conversion) {
-      const index = conversion.tags.indexOf(tag)
-      if (index < 0) {
-        throw new Error("conversion does not contain tag")
-      }
-      conversion.tags.splice(index, 1)
-      conversion = conversion
-    }
+    conversion.tags_remove(tag)
+    conversion = conversion
   }
 </script>
 
