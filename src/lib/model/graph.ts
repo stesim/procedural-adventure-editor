@@ -2,6 +2,11 @@ abstract class GraphNode {
   private _references = new Map<symbol, GraphNode[]>()
 
 
+  references(tag : symbol) : ReadonlyArray<GraphNode> {
+    return this._references.get(tag) ?? []
+  }
+
+
   _add_reference(tag : symbol, source : GraphNode) : void {
     let tag_references = this._references.get(tag)
     if (tag_references === undefined) {

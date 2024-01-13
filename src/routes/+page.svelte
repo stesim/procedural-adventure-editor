@@ -4,6 +4,7 @@
   import { deserialize_item_db, serialize_item_db, Effect, EffectConversion, Item, ItemDatabase, Tag } from "$lib/model"
   import { download, upload } from "$lib/io"
   import ItemEditor from "./item_editor.svelte"
+  import OverviewPanel from "./overview_panel.svelte"
 
 
   let item_db : ItemDatabase = create_example_db()
@@ -11,6 +12,8 @@
   let selected_item : Item | undefined = undefined
 
   let selected_effect : Effect | undefined = undefined
+
+  let view : "item_editor" | "effect_overview" = "item_editor"
 
 
   $: if (selected_item && !item_db.items.has(selected_item)) {
@@ -240,42 +243,55 @@
     <h1>{item_db.name}</h1>
     <button class="flat" on:click={rename_item_db} title="Rename Item Database">🖉</button>
   </header>
-  <header class="inset centered">
-    {item_db.effects.size} effects, {item_db.items.size} items
-  </header>
-  <aside class="inset panel">
-    <header>
-      <h2>Items</h2>
-      <menu>
-        <li><button class="flat large" on:click={add_item} title="Add Item">+</button></li>
-      </menu>
-    </header>
-    <ul class="scrollable">
-      {#each [...item_db.items].sort(by_name) as item, index (item)}
-        {@const id = `radio-button-item-${index}`}
-        <li>
-          <input type="radio" {id} bind:group={selected_item} value={item}>
-          <label for={id} class="item-row">
-            <span class="fill-right">{item.name}</span>
-            <button class="flat on-parent-hover" on:click={() => rename_item(item)} title="Rename Item" style="line-height: 1.25em;">🖉</button>
-            <button class="flat on-parent-hover" on:click={() => remove_item(item)} title="Delete Item">❌</button>
-          </label>
-        </li>
-      {/each}
-    </ul>
-  </aside>
-  <main class="inset panel" style="row-gap: 0;">
-    <header style="z-index: 1;">
-      {#if selected_item}
-        <h2 class="centered">{selected_item?.name ?? ""}</h2>
-      {/if}
-    </header>
-    <ItemEditor {item_db} item={selected_item}/>
-  </main>
+  <menu class="inset stretch">
+    <li>
+      <select bind:value={view} style="text-align: center;">
+        <option value="item_editor">Item Editor</option>
+        <option value="effect_overview">Effect Overview</option>
+      </select>
+    </li>
+  </menu>
+  {#if view === "item_editor"}
+    <aside class="inset panel">
+      <header>
+        <h2>Items</h2>
+        <span class="detail">({item_db.items.size})</span>
+        <menu>
+          <li><button class="flat large" on:click={add_item} title="Add Item">+</button></li>
+        </menu>
+      </header>
+      <ul class="scrollable">
+        {#each [...item_db.items].sort(by_name) as item, index (item)}
+          {@const id = `radio-button-item-${index}`}
+          <li>
+            <input type="radio" {id} bind:group={selected_item} value={item}>
+            <label for={id} class="item-row">
+              <span class="fill-right">{item.name}</span>
+              <button class="flat on-parent-hover" on:click={() => rename_item(item)} title="Rename Item" style="line-height: 1.25em;">🖉</button>
+              <button class="flat on-parent-hover" on:click={() => remove_item(item)} title="Delete Item">❌</button>
+            </label>
+          </li>
+        {/each}
+      </ul>
+    </aside>
+    <main class="inset panel">
+      <header style="z-index: 1;">
+        {#if selected_item}
+          <h2 class="centered">{selected_item?.name ?? ""}</h2>
+        {/if}
+      </header>
+      <ItemEditor {item_db} item={selected_item}/>
+    </main>
+  {:else if view === "effect_overview"}
+    <main class="inset panel" style="grid-column: auto / span 2;">
+      <OverviewPanel {item_db}/>
+    </main>
+  {/if}
   <aside class="grid auto-rows" style="gap: inherit;">
     <section class="inset panel">
       <header>
         <h2>Effects</h2>
+        <span class="detail">({item_db.effects.size})</span>
         <menu>
           <li><button class="flat large" on:click={add_effect} title="Add Effect">+</button></li>
         </menu>
@@ -297,6 +313,7 @@
     <section class="inset panel">
       <header>
         <h2>Item Tags</h2>
+        <span class="detail">({item_db.item_tags.size})</span>
         <menu>
           <li><button class="flat large" on:click={add_item_tag} title="Add Item Tag">+</button></li>
         </menu>
@@ -314,6 +331,7 @@
     <section class="inset panel">
       <header>
         <h2>Effect Conversion Tags</h2>
+        <span class="detail">({item_db.conversion_tags.size})</span>
         <menu>
           <li><button class="flat large" on:click={add_conversion_tag} title="Add Conversion Tag">+</button></li>
         </menu>
@@ -382,6 +400,7 @@
 
 
   header {
+    box-sizing: border-box;
     background-color: var(--palette-1);
     display: flex;
     flex-direction: row;
@@ -390,14 +409,9 @@
   }
 
 
-  header.centered {
-    justify-content: center;
-  }
-
-
   .panel > header {
     box-shadow: 0 0 0.5em rgba(0, 0, 0, 0.75);
-    min-height: 1.5rem;
+    min-height: 2.5rem;
     padding: 0.5rem 0.75rem;
   }
 
@@ -405,7 +419,6 @@
   h2 {
     font-size: inherit;
     margin: 0;
-    margin-right: auto;
   }
 
 
@@ -414,8 +427,19 @@
   }
 
 
-  .scrollable {
-    overflow: auto;
+  .detail {
+    font-size: 0.8em;
+    font-weight: normal;
+  }
+
+
+  h2 + .detail {
+    margin-left: 0.5em;
+  }
+
+
+  header > menu {
+    margin-left: auto;
   }
 
 
@@ -443,6 +467,11 @@
 
   menu.stretch > li > * {
     flex-grow: 1;
+  }
+
+
+  .scrollable {
+    overflow: auto;
   }
 
 
